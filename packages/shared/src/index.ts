@@ -1,0 +1,13 @@
+export * from './types.js';
+export type { ArchetypeFeatures } from './internal-types.js';
+export * from './languages.js';
+export { computeScan, detectTools, languageTimeline, WEIGHTS } from './scoring.js';
+export { ARCHETYPES, archetypeInfo, archetypeScores, classifyArchetype } from './archetype.js';
+export type { ArchetypeInfo } from './archetype.js';
+export { canonicalize, sha256Hex, computeIntegrityHash, signPayload, verifyIntegrity } from './integrity.js';
+export { validateScanPayload, MAX_EVIDENCE_COMMITS } from './validate.js';
+export type { ValidationResult } from './validate.js';
+export { demoScanInput, prng, DEMO_NOW, DEMO_MACHINE_FINGERPRINT } from './demo.js';
+export * from './trust.js';
+export { deriveAchievements, yearsBetween, RARITY_LABEL } from './achievements.js';
+export type { Achievement, AchievementKind, Rarity } from './achievements.js';

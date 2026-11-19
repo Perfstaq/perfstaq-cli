@@ -1,0 +1,55 @@
+{
+  "name": "perfstaq",
+  "version": "0.2.0",
+  "description": "Privacy-first local developer scan for Perfstaq. No source code or prompts leave your machine.",
+  "keywords": [
+    "developer",
+    "leaderboard",
+    "claude-code",
+    "cursor",
+    "codex",
+    "git",
+    "verification",
+    "freelance"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "perfstaq": "./bundle/perfstaq.js"
+  },
+  "main": "./bundle/perfstaq.js",
+  "files": [
+    "bundle",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/**/*.test.js",
+    "prepublishOnly": "pnpm build && node --test dist/collectors/*.test.js"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "open": "^10.1.0",
+    "ora": "^8.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "esbuild": "0.24.2",
+    "typescript": "^5.6.3",
+    "@perfstaq/shared": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Perfstaq/perfstaq-cli.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://rank.perfstaq.com",
+  "bugs": {
+    "url": "https://github.com/Perfstaq/perfstaq-cli/issues"
+  }
+}

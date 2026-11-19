@@ -1,0 +1,10 @@
+{
+  "name": "perfstaq-cli-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.18.2",
+  "scripts": {
+    "build": "pnpm --filter @perfstaq/shared build && pnpm --filter perfstaq build",
+    "test": "node --test packages/shared/dist/*.test.js packages/cli/dist/collectors/*.test.js"
+  },
+  "devDependencies": { "typescript": "^5.6.3" }
+}
