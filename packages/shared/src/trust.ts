@@ -16,6 +16,8 @@ export const LINE_TOLERANCE = 0.02;
  * history" from earning a verified seal.
  */
 export const MIN_EVIDENCE_COVERAGE = 0.5;
+/** Verified tiers need at least this many public commits submitted, whatever the scan claims. */
+export const MIN_EVIDENCE_COMMITS = 10;
 /** A GitHub account younger than this is flagged. */
 export const NEW_ACCOUNT_DAYS = 30;
 /** Overall score rising more than this between scans within 7 days is flagged. */
@@ -64,7 +66,9 @@ export function computeTrustTier(r: {
   commitsAnalyzed?: number;
 }): TrustTier {
   if (r.flags.includes('commit-mismatch') || r.flags.includes('evidence-inconsistent')) return 'self-reported';
+  if (r.flags.includes('github-unavailable')) return 'self-reported'; // couldn't check everything: re-scan later
   if (r.evidenceCommits !== undefined && r.commitsAnalyzed !== undefined) {
+    if (r.evidenceCommits < MIN_EVIDENCE_COMMITS) return 'self-reported';
     if (evidenceCoverage(r.evidenceCommits, r.commitsAnalyzed) < MIN_EVIDENCE_COVERAGE) return 'self-reported';
   }
   if (r.checked === 0 || r.matched < MIN_MATCHED_FOR_VERIFIED || r.matched / r.checked < MIN_MATCH_RATE) return 'self-reported';
@@ -94,4 +98,22 @@ export function pickSample<T>(items: T[], seed: string, n = VERIFY_SAMPLE_SIZE):
     [idx[i], idx[j]] = [idx[j]!, idx[i]!];
   }
   return idx.slice(0, n).map((i) => items[i]!);
+}
+
+/**
+ * Internal consistency of a payload's own numbers. A client can't shrink `commitsAnalyzed`
+ * to make a few public commits look like full coverage without contradicting the per-language
+ * counts it also reports. Returns flags; any flag means the scan can't be verified.
+ */
+export function payloadConsistencyFlags(p: {
+  commitsAnalyzed: number;
+  evidence: { commits: unknown[] };
+  stackBreakdown: { verifiedCommits: number }[];
+  languageTimeline: { commits: number }[];
+}): string[] {
+  const flags: string[] = [];
+  const total = p.commitsAnalyzed;
+  const perLanguage = [...p.stackBreakdown.map((s) => s.verifiedCommits), ...p.languageTimeline.map((t) => t.commits)];
+  if (p.evidence.commits.length > total || perLanguage.some((n) => n > total)) flags.push('evidence-inconsistent');
+  return flags;
 }

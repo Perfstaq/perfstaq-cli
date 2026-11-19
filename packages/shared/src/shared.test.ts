@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  payloadConsistencyFlags,
   computeTrustTier,
   deriveAchievements,
   linesMatch,
@@ -100,6 +101,10 @@ test('trust tiers', () => {
   assert.equal(computeTrustTier({ checked: 12, matched: 12, signed: 0, flags: [], evidenceCommits: 40, commitsAnalyzed: 500 }), 'self-reported');
   assert.equal(computeTrustTier({ checked: 12, matched: 12, signed: 0, flags: [], evidenceCommits: 400, commitsAnalyzed: 500 }), 'github-verified');
   assert.equal(computeTrustTier({ checked: 12, matched: 12, signed: 0, flags: [], evidenceCommits: 1000, commitsAnalyzed: 9000 }), 'github-verified');
+  // Tiny evidence can't verify even at 100% "coverage" (client claims 8 commits total).
+  assert.equal(computeTrustTier({ checked: 8, matched: 8, signed: 0, flags: [], evidenceCommits: 8, commitsAnalyzed: 8 }), 'self-reported');
+  // Any lookup GitHub couldn't answer blocks a verified tier.
+  assert.equal(computeTrustTier({ checked: 12, matched: 11, signed: 0, flags: ['github-unavailable'], evidenceCommits: 400, commitsAnalyzed: 500 }), 'self-reported');
 });
 
 test('sample is seeded by nonce and stable', () => {
@@ -119,4 +124,10 @@ test('demo has timeline and achievements', async () => {
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(ids.includes('global-rank') && ids.includes('archetype') && ids.some((i) => i.startsWith('experience-')));
   assert.equal(validateScanPayload(p).ok, true);
+});
+
+test('consistency: shrunk commit total contradicts per-language counts', () => {
+  const base = { evidence: { commits: [] as unknown[] }, stackBreakdown: [{ verifiedCommits: 40 }], languageTimeline: [{ commits: 300 }] };
+  assert.deepEqual(payloadConsistencyFlags({ ...base, commitsAnalyzed: 500 }), []);
+  assert.deepEqual(payloadConsistencyFlags({ ...base, commitsAnalyzed: 20 }), ['evidence-inconsistent']);
 });
