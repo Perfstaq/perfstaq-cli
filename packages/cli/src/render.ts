@@ -1,114 +1,157 @@
+/**
+ * Everything the CLI prints, in plain words. Rule of thumb: someone who has never
+ * heard of git should understand every line (the "mom test"). No jargon like
+ * "payload", "nonce", "evidence", "rigor" or "archetype" in what people read.
+ */
 import chalk from 'chalk';
-import { archetypeInfo, deriveAchievements, RARITY_LABEL, yearsBetween } from '@perfstaq/shared';
+import { archetypeInfo, deriveAchievements, yearsBetween } from '@perfstaq/shared';
 import type { ScanPayload } from '@perfstaq/shared';
 
-export const PRIVACY_LINE =
-  'Privacy Check: 0 lines of source code or prompts read. Only anonymized metrics ready to upload.';
+const ORANGE = chalk.hex('#ff6a1a');
+const fmt = (n: number) => n.toLocaleString('en-US');
+const W = 58;
 
-const fmtNum = (n: number) => n.toLocaleString('en-US');
-const monthYear = (iso: string) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+export const NOTHING_SENT = 'Nothing has left this computer. Your code, file names and AI chats are never sent.';
 
-const W = 62; // inner width
+export function header(): string {
+  return [
+    '',
+    `${ORANGE.bold('>_ perfstaq')}  ${chalk.dim('turns your real coding work into a profile people can trust')}`,
+    '',
+  ].join('\n');
+}
 
-function bar(value: number, max: number, width: number): string {
+export function step(n: number, total: number, title: string): string {
+  return `\n${ORANGE.bold(`Step ${n} of ${total}`)}  ${chalk.bold(title)}`;
+}
+
+export const ok = (s: string) => `  ${chalk.green('✓')} ${s}`;
+export const note = (s: string) => `  ${chalk.dim(s)}`;
+export const warn = (s: string) => `  ${chalk.yellow('!')} ${s}`;
+export const bad = (s: string) => `  ${chalk.red('✗')} ${s}`;
+
+function meter(value: number, max: number, width = 20): string {
   const n = Math.max(0, Math.min(width, Math.round((value / max) * width)));
-  return chalk.cyan('█'.repeat(n)) + chalk.dim('░'.repeat(width - n));
+  return ORANGE('█'.repeat(n)) + chalk.dim('░'.repeat(width - n));
 }
 
-function pad(s: string, visible: number): string {
-  return s + ' '.repeat(Math.max(0, W - visible));
+const VALUE_W = W - 21; // room for a value after the 20-char label
+
+/** Join items with ", " but only as many as fit; never cut a word. */
+function fitList(items: string[], width = VALUE_W): string {
+  let out = '';
+  for (const it of items) {
+    const next = out ? `${out}, ${it}` : it;
+    if (next.length > width) break;
+    out = next;
+  }
+  return out || (items[0] ?? '').slice(0, width);
 }
 
-/** Render a row; `plain` is the unstyled text used to measure width. */
-function row(styled: string, plain: string): string {
-  return chalk.dim('│ ') + pad(styled, plain.length) + chalk.dim('│');
+/** Wrap text into lines no wider than `width`, on word boundaries. */
+function wrap(text: string, width = VALUE_W): string[] {
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of text.split(/\s+/)) {
+    if (cur && `${cur} ${w}`.length > width) {
+      lines.push(cur);
+      cur = w;
+    } else cur = cur ? `${cur} ${w}` : w;
+  }
+  if (cur) lines.push(cur);
+  return lines;
 }
 
-function rule(l: string, r: string): string {
-  return chalk.dim(l + '─'.repeat(W + 1) + r);
+function boxed(lines: [styled: string, plain: string][], title: string): string {
+  const top = chalk.dim(`┌─ ${title} ${'─'.repeat(Math.max(0, W - title.length - 3))}┐`);
+  const body = lines.map(([s, p]) => `${chalk.dim('│')} ${s}${' '.repeat(Math.max(0, W - p.length - 1))}${chalk.dim('│')}`);
+  return [top, ...body, chalk.dim(`└${'─'.repeat(W)}┘`)].join('\n');
 }
 
-function line(label: string, value: string): string {
-  const plain = `${label.padEnd(24)}${value}`;
-  return row(`${chalk.dim(label.padEnd(24))}${chalk.bold(value)}`, plain);
-}
+/** The plain-words summary of a scan. */
+export function renderSummary(p: ScanPayload): string {
+  const L: [string, string][] = [];
+  const add = (label: string, value: string, styledValue = value) => L.push([`${chalk.dim(label.padEnd(20))}${styledValue}`, `${label.padEnd(20)}${value}`]);
+  const blank = () => L.push(['', '']);
 
-export function renderScorecard(p: ScanPayload): string {
-  const out: string[] = [];
-  const blank = () => out.push(row('', ''));
-  const title = 'PERFSTAQ  ·  Local Scan';
-  out.push(rule('┌', '┐'));
-  out.push(row(chalk.bold.magenta(title), title));
-  out.push(rule('├', '┤'));
+  const score = `${p.overallScore} out of 1000`;
+  L.push([`${chalk.bold('Your score'.padEnd(20))}${ORANGE.bold(score.padEnd(17))}${meter(p.overallScore, 1000, 18)}`, `${'Your score'.padEnd(20)}${score.padEnd(17)}${'x'.repeat(18)}`]);
   blank();
-  const overall = `${p.overallScore} / 1000`;
-  out.push(row(`${chalk.dim('Overall Score'.padEnd(24))}${chalk.bold.green(overall.padEnd(12))}${bar(p.overallScore, 1000, 24)}`, `${'Overall Score'.padEnd(24)}${overall.padEnd(12)}${'x'.repeat(24)}`));
-  out.push(line('30-day Score', `${p.rolling30dScore} / 1000`));
-  blank();
-  out.push(row(chalk.bold('Sub-scores'), 'Sub-scores'));
-  const subs: [string, number, string][] = [
-    ['Rigor (40%)', p.subScores.rigor, ''],
-    ['AI Survival (30%)', p.subScores.aiSurvival, ''],
-    ['Stack Complexity (30%)', p.subScores.stackComplexity, ''],
+  const parts: [string, number][] = [
+    ['  Careful work', p.subScores.rigor],
+    ['  AI code you kept', p.subScores.aiSurvival],
+    ['  Range of skills', p.subScores.stackComplexity],
   ];
-  for (const [name, v] of subs) {
+  for (const [label, v] of parts) {
     const num = String(v).padStart(4);
-    out.push(row(`  ${name.padEnd(24)}${num}  ${bar(v, 1000, 24)}`, `  ${name.padEnd(24)}${num}  ${'x'.repeat(24)}`));
+    L.push([`${chalk.dim(label.padEnd(20))}${num}  ${meter(v, 1000, 18)}`, `${label.padEnd(20)}${num}  ${'x'.repeat(18)}`]);
   }
   blank();
-  out.push(row(chalk.bold('Top Stack'), 'Top Stack'));
-  const stacks = p.stackBreakdown.slice(0, 5);
-  if (stacks.length === 0) out.push(row(chalk.dim('  (no scored languages found)'), '  (no scored languages found)'));
-  for (const s of stacks) {
-    const name = (s.framework ? `${s.language}/${s.framework}` : s.language).slice(0, 20).padEnd(20);
-    const tail = `${String(Math.round(s.stackRating)).padStart(3)}  ${String(s.verifiedCommits).padStart(4)} commits`;
-    out.push(row(`  ${name} ${bar(s.stackRating, 100, 20)} ${tail}`, `  ${name} ${'x'.repeat(20)} ${tail}`));
-  }
-  blank();
-  out.push(row(chalk.bold('Experience (own commits, full history)'), 'Experience (own commits, full history)'));
-  if (p.languageTimeline.length === 0) out.push(row(chalk.dim('  (no language history found)'), '  (no language history found)'));
-  for (const e of p.languageTimeline.slice(0, 5)) {
-    const yrs = yearsBetween(e.firstCommitAt, e.lastCommitAt);
-    const span = yrs >= 1 ? `${yrs} yrs` : `${e.activeMonths} mo`;
-    const name = e.language.slice(0, 12).padEnd(13);
-    const commits = `${fmtNum(e.commits)} commits`.padStart(14);
-    const range = `${monthYear(e.firstCommitAt)} → ${monthYear(e.lastCommitAt)}`;
-    const plain = `  ${name}${span.padEnd(9)}${commits}  ${range}`;
-    out.push(row(`  ${chalk.cyan(name)}${chalk.bold(span.padEnd(9))}${commits}  ${chalk.dim(range)}`, plain));
-  }
-  blank();
-  const info = archetypeInfo(p.archetype);
-  out.push(line('Builder Archetype', p.archetype));
-  out.push(row(chalk.italic.dim('  ' + info.tagline), '  ' + info.tagline));
-  blank();
-  out.push(line('AI Survival Rate', `${p.aiMetrics.aiSurvivalRate}%`));
-  out.push(line('Primary AI tool', p.aiToolsDetected.primaryTool));
+
+  const langs = p.languageTimeline.slice(0, 3).map((t) => {
+    const yrs = yearsBetween(t.firstCommitAt, t.lastCommitAt);
+    return `${t.language} (${yrs >= 1 ? `${yrs} yrs` : `${t.activeMonths} mo`})`;
+  });
+  add('You code in', langs.length ? fitList(langs) : '—');
   const t = p.aiToolsDetected;
   const tools = [t.claudeCode && 'Claude Code', t.cursor && 'Cursor', t.codex && 'Codex'].filter(Boolean).join(', ');
-  out.push(line('AI tools', tools || 'none detected'));
-  out.push(line('Commits analyzed', String(p.commitsAnalyzed)));
-  out.push(line('Repos analyzed', String(p.reposAnalyzed)));
-  out.push(line('Integrity hash', `${p.integrityHash.slice(0, 8)}…${p.integrityHash.slice(-6)}`));
-  blank();
-  out.push(row(chalk.bold('Achievements (local preview)'), 'Achievements (local preview)'));
-  for (const a of deriveAchievements(p, { tier: 'self-reported' })) {
-    const head = `  [${RARITY_LABEL[a.rarity]}] ${a.value} · ${a.title}`.slice(0, W - 1);
-    out.push(row(head.replace(/\[[^\]]+\]/, (m) => chalk.yellow(m)), head));
-    const detail = `      ${a.detail}`.slice(0, W - 1);
-    out.push(row(chalk.dim(detail), detail));
-  }
-  const seal = '  Seal is set after the GitHub check on the server.';
-  out.push(row(chalk.dim(seal), seal));
-  blank();
-  out.push(rule('└', '┘'));
-  out.push('');
-  out.push(chalk.green(PRIVACY_LINE));
-  return out.join('\n');
+  add('AI helpers', tools || 'none found');
+  const info = archetypeInfo(p.archetype);
+  add('Your style', p.archetype, chalk.bold(p.archetype));
+  for (const t of wrap(info.tagline)) L.push([chalk.dim(`${' '.repeat(20)}${t}`), `${' '.repeat(20)}${t}`]);
+  const cards = deriveAchievements(p, { tier: 'self-reported' }).length;
+  add('Cards earned', `${cards} shareable cards`);
+
+  return [boxed(L, 'Your coding profile'), '', `  ${chalk.green(NOTHING_SENT)}`].join('\n');
 }
 
-export function renderEvidenceNote(commits: number, repos: number): string {
-  return chalk.green(
-    `Evidence: sharing ${fmtNum(commits)} commit IDs from ${fmtNum(repos)} public GitHub repo${repos === 1 ? '' : 's'} (no code, no paths, no private repos).`,
-  );
+/** What the score parts mean, for people who ask "what is careful work?". */
+export const SCORE_HELP = [
+  'Careful work: you add tests, rarely undo your changes, and clean up code.',
+  'AI code you kept: how much of what AI wrote for you was still there a day later.',
+  'Range of skills: how many languages and how deep your projects go.',
+];
+
+export function renderFound(opts: { projects: number; commits: number; mode: 'project' | 'folder'; sessions: Record<string, number> }): string[] {
+  const out: string[] = [];
+  out.push(ok(opts.mode === 'project' ? 'Found your project' : `Found ${opts.projects} project${opts.projects === 1 ? '' : 's'} in this folder`));
+  out.push(ok(`${fmt(opts.commits)} changes you saved with git`));
+  const used = Object.entries(opts.sessions).filter(([, n]) => n > 0);
+  if (used.length) out.push(ok(`AI helpers you use: ${used.map(([k, n]) => `${k} (${fmt(n)} sessions)`).join(', ')}`));
+  else out.push(note('No AI helpers found (Claude Code, Cursor, Codex). That is fine.'));
+  return out;
+}
+
+export function renderNothingFound(mode: 'project' | 'folder', projects: number): string {
+  const lines = [
+    '',
+    bad(projects > 0 ? "Found projects here, but none of the changes in them are yours." : "We couldn't find any of your code here."),
+    '',
+    note('Perfstaq needs to run in the folder where your projects are.'),
+    note('For example, if your projects are in a folder called "code":'),
+    '',
+    `      ${ORANGE('cd ~/code')}`,
+    `      ${ORANGE('npx perfstaq scan')}`,
+    '',
+  ];
+  if (projects > 0) {
+    lines.push(note("If they are yours, git may know you by another email. Tell us which one:"));
+    lines.push(`      ${ORANGE('npx perfstaq scan --email you@example.com')}`);
+    lines.push('');
+  }
+  lines.push(note('Nothing was sent anywhere.'));
+  return lines.join('\n');
+}
+
+/** Why a profile ended up "not verified", and the one thing to do about it. */
+export function explainNotVerified(opts: { shared: boolean; checkFailed: boolean; publicCommits: number; flags: string[] }): [why: string, fix: string] {
+  const f = opts.flags;
+  if (!opts.shared) return ['you chose not to let us check your GitHub work.', 'Run the scan again and answer yes to the check.'];
+  if (opts.checkFailed || f.includes('github-unavailable')) return ["GitHub didn't answer while we were checking.", 'Nothing is wrong. Run the scan again tomorrow.'];
+  if (opts.publicCommits === 0) return ['none of your projects here are public on GitHub, so nobody can check them.', 'Put at least one project on GitHub as public, then scan again.'];
+  if (f.includes('commit-not-found')) return ["some of your work isn't on GitHub yet.", 'Push your latest changes to GitHub (git push), then scan again tomorrow.'];
+  if (f.includes('commit-mismatch')) return ["some of the work we checked doesn't belong to your GitHub account.", 'Make sure git uses the same email as your GitHub account, then scan again tomorrow.'];
+  if (f.includes('low-evidence-coverage')) return ['most of your work is private, so we could only check a small part.', 'Make a few more of your projects public on GitHub, then scan again tomorrow.'];
+  if (f.includes('evidence-inconsistent')) return ["the numbers from this scan didn't add up.", 'Scan again tomorrow with the latest version: npx perfstaq@latest scan'];
+  return ["we couldn't confirm enough of your work.", 'Make sure your projects are public on GitHub, then scan again tomorrow.'];
 }

@@ -13,7 +13,7 @@ export interface AuthResult {
 }
 
 const PAGE = (msg: string) =>
-  `<!doctype html><meta charset="utf-8"><title>Perfstaq</title><body style="font-family:system-ui;background:#0b0b10;color:#eee;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h2>${msg}</h2><p>You can close this tab and return to your terminal.</p></div></body>`;
+  `<!doctype html><meta charset="utf-8"><title>Perfstaq</title><body style="font-family:system-ui;background:#0b0b10;color:#eee;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center;font-family:ui-monospace,Menlo,monospace"><h2 style="color:#ff6a1a">${msg}</h2><p>Go back to your terminal window to finish. You can close this tab.</p></div></body>`;
 
 function listen(server: Server): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -34,7 +34,7 @@ function listen(server: Server): Promise<number> {
 
 /** Browser login via a loopback callback. Resolves with the token + GitHub username. */
 // First-time GitHub sign-in (consent screen, maybe 2FA) can take a few minutes.
-export async function browserLogin(api: string, timeoutMs = 300_000): Promise<AuthResult> {
+export async function browserLogin(api: string, onUrl?: (url: string) => void, timeoutMs = 300_000): Promise<AuthResult> {
   const state = randomBytes(16).toString('hex');
   let done: (r: AuthResult | Error) => void = () => undefined;
   const result = new Promise<AuthResult | Error>((r) => (done = r));
@@ -86,7 +86,7 @@ export async function browserLogin(api: string, timeoutMs = 300_000): Promise<Au
         html(res, 400, 'Sign-in failed');
         return;
       }
-      html(res, 200, 'Signed in to Perfstaq');
+      html(res, 200, '✓ Signed in. One more step in your terminal.');
       done({ token, username });
     });
     req.on('error', () => undefined);
@@ -94,9 +94,9 @@ export async function browserLogin(api: string, timeoutMs = 300_000): Promise<Au
 
   const port = await listen(server);
   const authUrl = `${api}/cli-auth?port=${port}&state=${state}`; // callback target is http://127.0.0.1:<port>/callback
-  console.log(`Opening ${authUrl}`);
+  onUrl?.(authUrl);
   // PERFSTAQ_NO_OPEN=1: don't launch a browser (CI, remote shells); open the printed URL yourself.
-  if (process.env.PERFSTAQ_NO_OPEN !== '1') open(authUrl).catch(() => console.log('Could not open a browser; open the URL above manually.'));
+  if (process.env.PERFSTAQ_NO_OPEN !== '1') open(authUrl).catch(() => undefined);
 
   const timer = setTimeout(() => done(new Error('Timed out waiting for browser sign-in (5 min).')), timeoutMs);
   const r = await result;
@@ -119,6 +119,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The server's own plain-language message, when it sent one. */
+    readonly detail = '',
   ) {
     super(message);
   }
@@ -140,7 +142,7 @@ function failure(prefix: string, res: Response, detail: string): ApiError {
       : res.status === 429
         ? ` (cooldown: Perfstaq accepts one scan per ${SCAN_COOLDOWN_HOURS} hours; try again later)`
         : '';
-  return new ApiError(`${prefix}: HTTP ${res.status}${hint}${detail ? ` - ${detail}` : ''}`, res.status);
+  return new ApiError(`${prefix}: HTTP ${res.status}${hint}${detail ? ` - ${detail}` : ''}`, res.status, detail);
 }
 
 async function post(api: string, path: string, token: string, body?: unknown): Promise<Response> {
@@ -152,7 +154,7 @@ async function post(api: string, path: string, token: string, body?: unknown): P
       signal: AbortSignal.timeout(30_000),
     });
   } catch (e) {
-    throw new Error(`Could not reach ${api}: ${(e as Error).message}`);
+    throw new Error(`Couldn't reach Perfstaq (fetch failed): ${(e as Error).message}`);
   }
 }
 

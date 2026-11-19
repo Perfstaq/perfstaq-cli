@@ -201,6 +201,48 @@ async function siblingRepos(root: string): Promise<string[]> {
   return found;
 }
 
+const SKIP_DIRS = new Set(['node_modules', 'Library', 'Applications', 'Pictures', 'Music', 'Movies', 'Downloads', 'dist', 'build', 'vendor', '.Trash']);
+
+async function isRepo(dir: string): Promise<boolean> {
+  try {
+    await stat(join(dir, '.git'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * When the scan is started outside a project (e.g. in ~/code or ~), look for projects
+ * inside it, two levels deep. Most people keep their projects in one folder.
+ */
+export async function childRepos(dir: string, depth = 2): Promise<string[]> {
+  const found: string[] = [];
+  const walk = async (d: string, left: number) => {
+    if (found.length >= MAX_REPOS || left < 0) return;
+    let names: string[];
+    try {
+      names = (await readdir(d)).sort();
+    } catch {
+      return;
+    }
+    for (const n of names) {
+      if (found.length >= MAX_REPOS) return;
+      if (n.startsWith('.') || SKIP_DIRS.has(n)) continue;
+      const sub = join(d, n);
+      try {
+        if (!(await stat(sub)).isDirectory()) continue;
+      } catch {
+        continue;
+      }
+      if (await isRepo(sub)) found.push(sub);
+      else await walk(sub, left - 1);
+    }
+  };
+  await walk(dir, depth - 1);
+  return found;
+}
+
 /** Own commits of one repo, kept locally for GitHub evidence. No paths. */
 export interface OwnRepoCommit {
   sha: string;
@@ -223,12 +265,16 @@ export interface GitResult {
   unidentified: boolean;
   /** Emails used to identify the developer's commits. */
   emails: string[];
+  /** Projects looked at (git repos found), before filtering to your own commits. */
+  reposFound: number;
+  /** 'project': ran inside a project. 'folder': ran in a folder and searched inside it. */
+  mode: 'project' | 'folder';
 }
 
 export const UNIDENTIFIED_WARNING =
-  "Couldn't identify your commits — set git user.email or pass --email; counting every commit";
+  "We couldn't tell which changes are yours, so we counted all of them. Fix: run  git config --global user.email you@example.com  (the email you use on GitHub), then scan again.";
 
-const EMPTY: GitResult = { commits: [], reposAnalyzed: 0, repos: [], unidentified: false, emails: [] };
+const EMPTY: GitResult = { commits: [], reposAnalyzed: 0, repos: [], unidentified: false, emails: [], reposFound: 0, mode: 'folder' };
 
 export async function collectGit(opts: {
   cwd: string;
@@ -238,9 +284,10 @@ export async function collectGit(opts: {
 }): Promise<GitResult> {
   try {
     const root = await repoRoot(opts.cwd);
-    if (!root) return EMPTY;
-    const repos = [root];
-    if (opts.all) repos.push(...(await siblingRepos(root)));
+    const mode: GitResult['mode'] = root ? 'project' : 'folder';
+    const repos = root ? [root] : await childRepos(opts.cwd);
+    if (root && opts.all) repos.push(...(await siblingRepos(root)));
+    if (repos.length === 0) return EMPTY;
     const emailSet = new Set((opts.emails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean));
     const cfg = await Promise.all(repos.map((r) => configuredEmails(r)));
     for (const list of cfg) for (const e of list) emailSet.add(e);
@@ -269,7 +316,7 @@ export async function collectGit(opts: {
       });
     }
     commits.sort((a, b) => a.timestamp - b.timestamp);
-    return { commits, reposAnalyzed, repos: repoScans, unidentified, emails: [...emailSet].sort() };
+    return { commits, reposAnalyzed, repos: repoScans, unidentified, emails: [...emailSet].sort(), reposFound: repos.length, mode };
   } catch {
     return EMPTY;
   }
