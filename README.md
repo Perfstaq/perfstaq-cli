@@ -1,6 +1,6 @@
 # perfstaq
 
-The open-source scanner behind [Perfstaq](https://rank.perfstaq.com): it turns your real git history and AI coding sessions into a developer profile a client can verify.
+The open-source scanner behind [Perfstaq](https://perfstaq.com): it turns your real git history and AI coding sessions into a developer profile a client can verify.
 
 ```bash
 npx perfstaq scan

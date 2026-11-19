@@ -167,7 +167,7 @@ program
   .option('--evidence', 'share commit IDs from public GitHub repos for verification (skips the prompt)')
   .option('--no-evidence', 'do not share commit IDs (profile stays self-reported)')
   .option('--email <addr>', 'git author email that is yours (repeatable)', (v: string, prev: string[] = []) => [...prev, v])
-  .option('--api <url>', 'Perfstaq API base URL', 'https://rank.perfstaq.com')
+  .option('--api <url>', 'Perfstaq API base URL', 'https://perfstaq.com')
   .action(async (opts: Opts) => {
     try {
       await scan(opts);

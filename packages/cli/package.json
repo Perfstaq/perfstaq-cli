@@ -1,6 +1,6 @@
 {
   "name": "perfstaq",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Privacy-first local developer scan for Perfstaq. No source code or prompts leave your machine.",
   "keywords": [
     "developer",
@@ -15,9 +15,9 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "perfstaq": "./bundle/perfstaq.js"
+    "perfstaq": "bundle/perfstaq.js"
   },
-  "main": "./bundle/perfstaq.js",
+  "main": "bundle/perfstaq.js",
   "files": [
     "bundle",
     "README.md"
@@ -48,7 +48,7 @@
     "url": "git+https://github.com/Perfstaq/perfstaq-cli.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://rank.perfstaq.com",
+  "homepage": "https://perfstaq.com",
   "bugs": {
     "url": "https://github.com/Perfstaq/perfstaq-cli/issues"
   }
