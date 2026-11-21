@@ -215,7 +215,7 @@ async function scan(opts: Opts): Promise<void> {
       say(`  ${chalk.dim('To fix'.padEnd(14))}${fix}`);
     } else {
       say(`  ${chalk.dim('Badge'.padEnd(14))}${chalk.green(tier === 'signed' ? '✓ Verified and signed' : '✓ Verified')} ${chalk.dim('(we checked your work on GitHub)')}`);
-      if (typeof r.globalRank === 'number') say(`  ${chalk.dim('Rank'.padEnd(14))}#${r.globalRank} on the Perfstaq leaderboard`);
+      if (typeof r.topPercent === 'number') say(`  ${chalk.dim('Standing'.padEnd(14))}${chalk.bold(`Top ${r.topPercent}%`)} of verified developers on Perfstaq`);
     }
     say('');
     say(note('Opening your profile now. Click any card to share it on LinkedIn, X or Instagram.'));

@@ -9,5 +9,6 @@ export { validateScanPayload, MAX_EVIDENCE_COMMITS } from './validate.js';
 export type { ValidationResult } from './validate.js';
 export { demoScanInput, prng, DEMO_NOW, DEMO_MACHINE_FINGERPRINT } from './demo.js';
 export * from './trust.js';
+export * from './percentile.js';
 export { deriveAchievements, yearsBetween, RARITY_LABEL } from './achievements.js';
 export type { Achievement, AchievementKind, Rarity } from './achievements.js';

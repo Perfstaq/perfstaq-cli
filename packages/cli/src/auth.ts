@@ -110,6 +110,7 @@ export async function browserLogin(api: string, onUrl?: (url: string) => void, t
 export interface UploadResponse {
   profileUrl?: string;
   globalRank?: number | null;
+  topPercent?: number | null;
   overallScore?: number;
   trustTier?: TrustTier;
   flags?: string[];

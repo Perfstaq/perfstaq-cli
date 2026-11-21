@@ -63,23 +63,23 @@ export function yearsBetween(first: string, last: string): number {
  */
 export function deriveAchievements(
   p: ScanPayload,
-  opts: { tier: TrustTier; globalRank?: number | null } = { tier: 'self-reported' },
+  opts: { tier: TrustTier; topPercent?: number | null } = { tier: 'self-reported' },
 ): Achievement[] {
   const tier = opts.tier;
   const out: Achievement[] = [];
 
-  if (opts.globalRank && opts.globalRank <= 100) {
-    const r = opts.globalRank;
+  if (opts.topPercent) {
+    const t = opts.topPercent;
     out.push({
-      id: 'global-rank',
+      id: 'percentile',
       kind: 'global-rank',
-      eyebrow: 'GLOBAL RANK',
-      value: `#${r}`,
-      title: 'on the Perfstaq Top 100',
+      eyebrow: 'STANDING',
+      value: `Top ${t}%`,
+      title: 'of verified developers on Perfstaq',
       detail: `Overall index ${p.overallScore}/1000`,
-      rarity: r <= 3 ? 'legendary' : r <= 10 ? 'epic' : r <= 50 ? 'rare' : 'common',
+      rarity: t <= 1 ? 'legendary' : t <= 5 ? 'epic' : t <= 10 ? 'rare' : 'common',
       tier,
-      shareText: `I'm #${r} on the Perfstaq global Top 100 (${p.overallScore}/1000), ranked on engineering rigor and AI code that survives review.`,
+      shareText: `I'm in the top ${t}% of verified developers on Perfstaq (${p.overallScore}/1000), ranked on engineering rigor and AI code that survives review.`,
     });
   }
 

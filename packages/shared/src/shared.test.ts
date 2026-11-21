@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  topPercent,
   payloadConsistencyFlags,
   computeTrustTier,
   deriveAchievements,
@@ -119,10 +120,10 @@ test('demo has timeline and achievements', async () => {
   assert.ok(p.languageTimeline.length >= 3);
   assert.ok(p.languageTimeline[0]!.firstCommitAt < p.languageTimeline[0]!.lastCommitAt);
   assert.equal(p.aiToolsDetected.codex, true);
-  const cards = deriveAchievements(p, { tier: 'github-verified', globalRank: 4 });
+  const cards = deriveAchievements(p, { tier: 'github-verified', topPercent: 3 });
   const ids = cards.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
-  assert.ok(ids.includes('global-rank') && ids.includes('archetype') && ids.some((i) => i.startsWith('experience-')));
+  assert.ok(ids.includes('percentile') && ids.includes('archetype') && ids.some((i) => i.startsWith('experience-')));
   assert.equal(validateScanPayload(p).ok, true);
 });
 
@@ -130,4 +131,14 @@ test('consistency: shrunk commit total contradicts per-language counts', () => {
   const base = { evidence: { commits: [] as unknown[] }, stackBreakdown: [{ verifiedCommits: 40 }], languageTimeline: [{ commits: 300 }] };
   assert.deepEqual(payloadConsistencyFlags({ ...base, commitsAnalyzed: 500 }), []);
   assert.deepEqual(payloadConsistencyFlags({ ...base, commitsAnalyzed: 20 }), ['evidence-inconsistent']);
+});
+
+test('percentile buckets: honest, snapped up, bottom half unlabelled', () => {
+  assert.equal(topPercent(1, 1000), 1);
+  assert.equal(topPercent(25, 1000), 3);
+  assert.equal(topPercent(1, 10), 5);
+  assert.equal(topPercent(1, 1), 50);
+  assert.equal(topPercent(2, 2), null);
+  assert.equal(topPercent(600, 1000), null);
+  assert.equal(topPercent(0, 10), null);
 });

@@ -1,6 +1,6 @@
 {
   "name": "perfstaq",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Privacy-first local developer scan for Perfstaq. No source code or prompts leave your machine.",
   "keywords": [
     "developer",
