@@ -19,6 +19,7 @@ import open from 'open';
 import { CLI_VERSION } from './version.js';
 
 interface Opts {
+  key?: string; // one-line connect key from perfstaq.com/start
   demo?: boolean;
   all?: boolean;
   json?: boolean;
@@ -46,10 +47,17 @@ async function scan(opts: Opts): Promise<void> {
     if (!quiet) console.log(s);
   };
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  // The command copied from perfstaq.com/start carries a single-use key: no questions, no browser.
+  const key = (opts.key ?? process.env.PERFSTAQ_KEY ?? '').trim() || null;
+  if (key && !/^pq_[A-Za-z0-9_-]{32,64}$/.test(key)) {
+    say(bad('That key looks wrong. Copy your command again from perfstaq.com/start.'));
+    process.exitCode = 1;
+    return;
+  }
 
   // ---------- Step 1: look at the work, on this computer only ----------
   say(header());
-  say(step(1, 3, 'Looking at your work on this computer'));
+  say(step(1, key ? 2 : 3, 'Looking at your work on this computer'));
   // Spinners only in a real terminal with a known width (CI and some editors report 0 columns).
   const canSpin = !quiet && Boolean(process.stderr.isTTY) && (process.stderr.columns ?? 0) >= 20;
   const spinner = canSpin ? ora({ text: 'Reading your projects…', stream: process.stderr, indent: 2 }).start() : null;
@@ -110,7 +118,7 @@ async function scan(opts: Opts): Promise<void> {
     say('');
     return;
   }
-  if (opts.upload === false || (!interactive && !opts.yes)) {
+  if (opts.upload === false || (!interactive && !opts.yes && !key)) {
     say('');
     say(note('Want a public profile and shareable cards? Run  npx perfstaq scan  again and say yes.'));
     say('');
@@ -118,11 +126,13 @@ async function scan(opts: Opts): Promise<void> {
   }
 
   // ---------- Step 2: optional public profile ----------
-  say(step(2, 3, 'Make it a public profile? (optional)'));
-  say(note('You get a page like perfstaq.com/u/yourname and cards you can post on LinkedIn, X or Instagram.'));
-  say(note('Only your scores are sent. Never your code, file names or AI chats.'));
-  say('');
-  if (!opts.yes && !(await ask('  Make my profile? (Y/n) '))) {
+  if (!key) {
+    say(step(2, 3, 'Make it a public profile? (optional)'));
+    say(note('You get a page like perfstaq.com/u/yourname and cards you can post on LinkedIn, X or Instagram.'));
+    say(note('Only your scores are sent. Never your code, file names or AI chats.'));
+    say('');
+  }
+  if (!key && !opts.yes && !(await ask('  Make my profile? (Y/n) '))) {
     say('');
     say(note('No problem. Nothing was sent.'));
     say('');
@@ -131,14 +141,20 @@ async function scan(opts: Opts): Promise<void> {
 
   try {
     say('');
-    say(note('A browser window will open. Sign in with GitHub, then click "Yes, this is me".'));
-    const auth = await browserLogin(api, (url) => {
-      say(note('If nothing opens, copy this link into your browser:'));
-      say(`      ${url}`);
-      say('');
-    });
-    say(ok(`Signed in as @${auth.username}`));
-    if (interactive && !opts.yes && !(await ask(`  Is @${auth.username} your GitHub account? (Y/n) `))) {
+    let auth: { token: string; username: string };
+    if (key) {
+      // Signed in on the website already; the key says who you are.
+      auth = { token: key, username: '' };
+    } else {
+      say(note('A browser window will open. Sign in with GitHub, then click "Yes, this is me".'));
+      auth = await browserLogin(api, (url) => {
+        say(note('If nothing opens, copy this link into your browser:'));
+        say(`      ${url}`);
+        say('');
+      });
+      say(ok(`Signed in as @${auth.username}`));
+    }
+    if (!key && interactive && !opts.yes && !(await ask(`  Is @${auth.username} your GitHub account? (Y/n) `))) {
       say('');
       say(note('Then let\'s use yours. In your browser, sign out of GitHub (github.com → your picture → Sign out),'));
       say(note('then run  npx perfstaq scan  again and sign in with your own account. Nothing was saved.'));
@@ -147,6 +163,8 @@ async function scan(opts: Opts): Promise<void> {
     }
 
     let share = opts.evidence;
+    // The /start page told you about the public-commit check; --no-evidence opts out.
+    if (share === undefined && key) share = true;
     if (share === undefined && interactive) {
       say('');
       say(note('Want the ✓ Verified badge? We look up a few of your PUBLIC GitHub changes to confirm they are really yours.'));
@@ -160,7 +178,7 @@ async function scan(opts: Opts): Promise<void> {
     }
 
     // ---------- Step 3: save ----------
-    say(step(3, 3, 'Saving your profile'));
+    say(key ? step(2, 2, 'Saving your profile') : step(3, 3, 'Saving your profile'));
     let evidence: { nonce: string | null; commits: Awaited<ReturnType<typeof buildEvidence>>['commits'] } = { nonce: null, commits: [] };
     let checkFailed = false;
     let publicCommits = 0;
@@ -214,7 +232,7 @@ async function scan(opts: Opts): Promise<void> {
 /** Turn any failure into one plain sentence with what to do next. */
 function friendly(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 401) return 'Your sign-in expired. Run  npx perfstaq scan  again.';
+    if (e.status === 401) return e.detail || 'Your sign-in expired. Get a fresh command at perfstaq.com/start.';
     if (e.status === 429) {
       const iso = /\d{4}-\d{2}-\d{2}T[\d:.]+Z/.exec(e.message)?.[0];
       const when = iso ? new Date(iso).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : 'tomorrow';
@@ -241,6 +259,7 @@ program
   .option('--json', 'print the signed payload JSON only')
   .option('--no-upload', 'do not offer to upload')
   .option('-y, --yes', 'upload without asking (sign-in still happens in the browser)')
+  .option('--key <key>', 'your one-line key from perfstaq.com/start (signs you in, no browser needed)')
   .option('--evidence', 'share commit IDs from public GitHub repos for verification (skips the prompt)')
   .option('--no-evidence', 'do not share commit IDs (profile stays self-reported)')
   .option('--email <addr>', 'git author email that is yours (repeatable)', (v: string, prev: string[] = []) => [...prev, v])
