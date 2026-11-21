@@ -11,7 +11,12 @@ export type AchievementKind =
   | 'rigor'
   | 'polyglot'
   | 'consistency'
-  | 'global-rank';
+  | 'global-rank'
+  | 'stack-master'
+  | 'tests'
+  | 'refactor'
+  | 'shipping'
+  | 'momentum';
 
 export interface Achievement {
   /** Stable, URL-safe id, e.g. "archetype", "experience-typescript". */
@@ -114,6 +119,22 @@ export function deriveAchievements(
     });
   }
 
+  const best = [...p.stackBreakdown].filter((st) => st.verifiedCommits >= 10).sort((x, y) => y.stackRating - x.stackRating)[0];
+  if (best && best.stackRating >= 50) {
+    const name = best.framework ? `${best.language} / ${best.framework}` : best.language;
+    out.push({
+      id: `stack-${slug(best.language)}`,
+      kind: 'stack-master',
+      eyebrow: 'BEST STACK',
+      value: `${best.stackRating}/100`,
+      title: `${name} rating on verified commits`,
+      detail: `${fmt(best.verifiedCommits)} verified commits · ${best.percentage}% of your work`,
+      rarity: rarity(best.stackRating, [75, 85, 93]),
+      tier,
+      shareText: `My ${name} is rated ${best.stackRating}/100 on Perfstaq, from ${fmt(best.verifiedCommits)} verified commits.`,
+    });
+  }
+
   const tools = p.aiToolsDetected;
   if (tools.primaryTool !== 'Git-Only') {
     out.push({
@@ -153,6 +174,64 @@ export function deriveAchievements(
     tier,
     shareText: `Engineering rigor ${p.subScores.rigor}/1000 on Perfstaq: ${p.rigorMetrics.testCoverageDelta}% test lines, ${p.rigorMetrics.revertRate24h}% reverts.`,
   });
+
+  const r = p.rigorMetrics;
+  if (r.testCoverageDelta >= 5) {
+    out.push({
+      id: 'tests',
+      kind: 'tests',
+      eyebrow: 'TEST DISCIPLINE',
+      value: `${r.testCoverageDelta}%`,
+      title: 'test lines for every 100 lines shipped',
+      detail: `${r.revertRate24h}% of commits reverted within 24h`,
+      rarity: rarity(r.testCoverageDelta, [15, 25, 40]),
+      tier,
+      shareText: `I write ${r.testCoverageDelta} lines of tests for every 100 lines I ship, measured on my own commits with Perfstaq.`,
+    });
+  }
+
+  if (r.refactorRatio >= 8) {
+    out.push({
+      id: 'refactor',
+      kind: 'refactor',
+      eyebrow: 'LEAVES IT CLEANER',
+      value: `${r.refactorRatio}%`,
+      title: 'of commits are multi-file refactors',
+      detail: `${r.avgFilesPerCommit} files touched per commit on average`,
+      rarity: rarity(r.refactorRatio, [15, 22, 30]),
+      tier,
+      shareText: `${r.refactorRatio}% of my commits are refactors. I leave codebases cleaner than I found them.`,
+    });
+  }
+
+  if (p.commitsAnalyzed >= 50) {
+    out.push({
+      id: 'shipping',
+      kind: 'shipping',
+      eyebrow: 'SHIPPED',
+      value: fmt(p.commitsAnalyzed),
+      title: 'own commits on record',
+      detail: `${p.reposAnalyzed} ${p.reposAnalyzed === 1 ? 'repo' : 'repos'} · ${p.languageTimeline.length} languages`,
+      rarity: rarity(p.commitsAnalyzed, [500, 1500, 4000]),
+      tier,
+      shareText: `${fmt(p.commitsAnalyzed)} of my own commits across ${p.reposAnalyzed} repos, measured locally with Perfstaq.`,
+    });
+  }
+
+  if (p.rolling30dScore >= 500) {
+    const delta = p.rolling30dScore - p.overallScore;
+    out.push({
+      id: 'momentum',
+      kind: 'momentum',
+      eyebrow: 'LAST 30 DAYS',
+      value: `${p.rolling30dScore}`,
+      title: 'score from this month alone',
+      detail: delta >= 0 ? `+${delta} above the all-time index` : `All-time index ${p.overallScore}/1000`,
+      rarity: rarity(p.rolling30dScore, [700, 820, 900]),
+      tier,
+      shareText: `My last 30 days on Perfstaq: ${p.rolling30dScore}/1000.`,
+    });
+  }
 
   const strong = p.stackBreakdown.filter((s) => s.stackRating >= 60 && s.percentage >= 5);
   if (strong.length >= 3) {

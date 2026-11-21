@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   topPercent,
+  BENCHMARK_SCORES,
+  BENCHMARK_SIZE,
   payloadConsistencyFlags,
   computeTrustTier,
   deriveAchievements,
@@ -133,12 +135,19 @@ test('consistency: shrunk commit total contradicts per-language counts', () => {
   assert.deepEqual(payloadConsistencyFlags({ ...base, commitsAnalyzed: 20 }), ['evidence-inconsistent']);
 });
 
-test('percentile buckets: honest, snapped up, bottom half unlabelled', () => {
-  assert.equal(topPercent(1, 1000), 1);
-  assert.equal(topPercent(25, 1000), 3);
-  assert.equal(topPercent(1, 10), 5);
-  assert.equal(topPercent(1, 1), 50);
-  assert.equal(topPercent(2, 2), null);
-  assert.equal(topPercent(600, 1000), null);
-  assert.equal(topPercent(0, 10), null);
+test('percentile: exact, against benchmark + real developers', () => {
+  assert.equal(BENCHMARK_SIZE, 1000);
+  assert.equal(topPercent(1000), 1);
+  assert.equal(topPercent(0), null);
+  assert.equal(topPercent(100), null); // below the top half: no label
+  const median = BENCHMARK_SCORES[500]!;
+  assert.ok((topPercent(median + 1) ?? 0) >= 45 && (topPercent(median + 1) ?? 0) <= 50);
+  // Being the only real user doesn't make you Top 1%.
+  assert.equal(topPercent(median + 1, [median + 1]), topPercent(median + 1));
+  // Real developers above you push you down.
+  const p90 = BENCHMARK_SCORES[900]!;
+  const alone = topPercent(p90)!;
+  assert.ok(topPercent(p90, Array(200).fill(999))! > alone);
+  // Monotonic: higher score, never a worse label.
+  for (let s = 600; s < 1000; s += 7) assert.ok((topPercent(s + 7) ?? 99) <= (topPercent(s) ?? 99));
 });

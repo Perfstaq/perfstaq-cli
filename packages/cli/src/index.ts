@@ -218,9 +218,16 @@ async function scan(opts: Opts): Promise<void> {
       if (typeof r.topPercent === 'number') say(`  ${chalk.dim('Standing'.padEnd(14))}${chalk.bold(`Top ${r.topPercent}%`)} of verified developers on Perfstaq`);
     }
     say('');
-    say(note('Opening your profile now. Click any card to share it on LinkedIn, X or Instagram.'));
-    say('');
-    if (process.env.PERFSTAQ_NO_OPEN !== '1') open(url).catch(() => undefined);
+    if (key) {
+      // The perfstaq.com/start tab you copied this from is watching for this scan and turns
+      // into your profile by itself, so don't open a second tab.
+      say(note('Your perfstaq.com tab is switching to your profile now. Click any card to share it.'));
+      say('');
+    } else {
+      say(note('Opening your profile now. Click any card to share it on LinkedIn, X or Instagram.'));
+      say('');
+      if (process.env.PERFSTAQ_NO_OPEN !== '1') open(url).catch(() => undefined);
+    }
   } catch (e) {
     say('');
     say(bad(friendly(e)));
